@@ -1,0 +1,492 @@
+import { useState, useEffect } from "react";
+import { getUsers } from "./api";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import mammoth from "mammoth/mammoth.browser";
+import "./App.css";
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+const initialSkills = [
+  { name: "Python", level: 75 },
+  { name: "Java", level: 45 },
+  { name: "Machine Learning", level: 60 },
+  { name: "Communication", level: 80 },
+];
+
+const jobs = [
+  { title: "Python Developer", company: "Tech Solutions", skills: ["Python", "SQL"], match: 90 },
+  { title: "Machine Learning Engineer", company: "AI Labs", skills: ["Python", "Machine Learning"], match: 82 },
+  { title: "Frontend Developer", company: "Digital Works", skills: ["JavaScript", "React"], match: 70 },
+];
+
+const roleSkills = {
+  "AI Engineer": ["Python", "Machine Learning", "Deep Learning", "SQL", "Data Analysis", "Git"],
+  "Data Analyst": ["SQL", "Python", "Excel", "Data Analysis", "Power BI", "Statistics", "Tableau"],
+  "Web Developer": ["HTML", "CSS", "JavaScript", "React", "REST API", "Git"],
+  "Java Backend Developer": ["Java", "Spring Boot", "SQL", "REST API", "Git"],
+  "Frontend Developer": ["HTML", "CSS", "JavaScript", "React", "Git"],
+};
+
+const skillKeywords = [
+  "Python", "Java", "JavaScript", "React", "SQL", "MySQL",
+  "HTML", "CSS", "Machine Learning", "Deep Learning",
+  "Data Analysis", "Excel", "Power BI", "Tableau", "Git",
+  "REST API", "Spring Boot", "Node.js", "Communication",
+  "Problem Solving", "Statistics"
+];
+
+async function extractResumeText(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+
+  if (extension === "pdf") {
+    const pdf = await pdfjsLib.getDocument({
+      data: await file.arrayBuffer()
+    }).promise;
+
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((item) => item.str || "").join(" ") + " ";
+    }
+    return text;
+  }
+
+  if (extension === "docx") {
+    const result = await mammoth.extractRawText({
+      arrayBuffer: await file.arrayBuffer()
+    });
+    return result.value;
+  }
+
+  throw new Error("Please upload a PDF or DOCX resume.");
+}
+export default function App() {
+  const [users, setUsers] = useState([]);
+  const [apiError, setApiError] = useState("");
+
+  useEffect(() => {
+    getUsers()
+      .then((data) => setUsers(data))
+      .catch((error) => setApiError(error.message));
+  }, []);
+  const [page, setPage] = useState("Dashboard");
+  const [skills, setSkills] = useState(initialSkills);
+  const [applications, setApplications] = useState([]);
+  const [newSkill, setNewSkill] = useState("");
+  const [profile, setProfile] = useState({
+    name: "Sathya Priya",
+    email: "",
+    goal: "AI Engineer",
+  });
+
+  const [targetRole, setTargetRole] = useState("AI Engineer");
+  const [resumeFile, setResumeFile] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+
+  async function analyzeResume(event) {
+    event.preventDefault();
+    setAnalysisError("");
+    setAnalysis(null);
+
+    if (!resumeFile) {
+      setAnalysisError("Please choose a PDF or DOCX resume first.");
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      const text = await extractResumeText(resumeFile);
+      if (!text.trim()) {
+        throw new Error("No readable text found. If this is a scanned PDF, try a text-based PDF or DOCX.");
+      }
+
+      const normalizedText = text.toLowerCase();
+      const detected = skillKeywords.filter((skill) =>
+        normalizedText.includes(skill.toLowerCase())
+      );
+      const required = roleSkills[targetRole];
+      const found = required.filter((skill) => detected.includes(skill));
+      const missing = required.filter((skill) => !detected.includes(skill));
+      const match = Math.round((found.length / required.length) * 100);
+
+      setAnalysis({ detected, found, missing, match, role: targetRole });
+    } catch (error) {
+      setAnalysisError(error.message || "Could not analyze this resume.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+  const menu = ["Dashboard", "My Profile", "Resume", "Resume Analyzer", "My Skills", "Find Jobs", "Career Guidance", "Applications"];
+
+  function addSkill(event) {
+    event.preventDefault();
+    const name = newSkill.trim();
+    if (!name) return;
+    if (skills.some((skill) => skill.name.toLowerCase() === name.toLowerCase())) {
+      alert("This skill already exists.");
+      return;
+    }
+    setSkills([...skills, { name, level: 20 }]);
+    setNewSkill("");
+  }
+
+  function apply(job) {
+    if (!applications.some((item) => item.title === job.title)) {
+      setApplications([...applications, { ...job, status: "Applied" }]);
+    }
+  }
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-icon">S</div>
+          <div>SkillPath <span className="brand-ai">AI</span>
+            <small>YOUR CAREER COMPANION</small>
+          </div>
+        </div>
+
+        <p className="menu-label">WORKSPACE</p>
+        {menu.map((item) => (
+          <button
+            key={item}
+            className={`nav-item ${page === item ? "active" : ""}`}
+            onClick={() => setPage(item)}
+          >
+            {item}
+          </button>
+        ))}
+
+        <div className="sidebar-bottom">
+          <div className="avatar">SP</div>
+          <div><strong>{profile.name}</strong><small>Student Account</small></div>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div><span className="breadcrumb">Workspace / </span><strong>{page}</strong></div>
+          <span className="top-user">è Career journey in progress</span>
+        </header>
+
+        {page === "Dashboard" && (
+          <section>
+            <div className="welcome">
+              <div>
+                <span className="eyebrow">YOUR FUTURE STARTS HERE</span>
+                <h1>Build your future,<br />one skill at a time.</h1>
+                <p>Discover your strengths, close skill gaps, and take the next step in your career.</p>
+                <button className="primary" onClick={() => setPage("My Skills")}>Explore my skills </button>
+              </div>
+              <div className="welcome-art">
+                <div className="orbit orbit-one"></div>
+                <div className="orbit orbit-two"></div>
+                <div className="art-center"><small>YOUR<br />POTENTIAL</small></div>
+              </div>
+            </div>
+
+            <div className="section-heading">
+              <div><h2>Your career overview</h2><p>A snapshot of your professional journey</p></div>
+            </div>
+
+            <div className="stats">
+              <div className="stat-card"><small>Skills tracked</small><strong>{skills.length}</strong><span>Skills in your profile</span></div>
+              <div className="stat-card"><small>Career goal</small><strong>{profile.goal || "Not set"}</strong><span>Your target career</span></div>
+              <div className="stat-card"><small>Applications</small><strong>{applications.length}</strong><span>Jobs applied to</span></div>
+            </div>
+
+            <div className="content-grid">
+              <div className="panel">
+                <div className="panel-head"><div><h2>Your skills</h2><p>Keep growing every day</p></div>
+                  <button className="text-btn" onClick={() => setPage("My Skills")}>View all </button>
+                </div>
+                {skills.slice(0, 4).map((skill) => (
+                  <div className="skill-row" key={skill.name}>
+                    <div className="skill-label"><span>{skill.name}</span><strong>{skill.level}%</strong></div>
+                    <div className="progress"><div style={{ width: `${skill.level}%` }}></div></div>
+                  </div>
+                ))}
+              </div>
+              <div className="panel career-panel">
+                <span className="career-star"></span><h2>Your next chapter</h2>
+                <p>Build relevant skills and explore roles that match your interests.</p>
+                <button className="secondary" onClick={() => setPage("Career Guidance")}>Explore career paths </button>
+              </div>
+            </div>
+
+            <div className="panel jobs-panel">
+              <div className="panel-head"><div><h2>Recommended opportunities</h2><p>Explore sample roles</p></div>
+                <button className="text-btn" onClick={() => setPage("Find Jobs")}>Explore jobs </button>
+              </div>
+              {jobs.slice(0, 2).map((job) => (
+                <div className="job-row" key={job.title}>
+                  <div className="company-icon"></div>
+                  <div className="job-info"><strong>{job.title}</strong><small>{job.company}  -  Sample listing</small></div>
+                  <span className="match">{job.match}% match</span>
+                  <button className="outline-btn" onClick={() => setPage("Find Jobs")}>View role</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {page === "My Profile" && (
+          <section className="page-content">
+            <span className="eyebrow">ABOUT YOU</span><h1>My Profile</h1>
+            <p className="page-sub">Manage your professional information and career goal.</p>
+            <div className="panel form-panel">
+              <label>Full name<input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} /></label>
+              <label>Email address<input type="email" placeholder="Enter your email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} /></label>
+              <label>Target career<input value={profile.goal} onChange={(e) => setProfile({ ...profile, goal: e.target.value })} /></label>
+              <button className="primary" onClick={() => alert("Profile updated for this session!")}>Save profile</button>
+            </div>
+          </section>
+        )}
+
+        {page === "My Skills" && (
+          <section className="page-content">
+            <span className="eyebrow">YOUR GROWTH</span><h1>My Skills</h1>
+            <p className="page-sub">Track your abilities and add skills you want to develop.</p>
+            <form className="add-skill panel" onSubmit={addSkill}>
+              <input placeholder="Enter a skill, e.g. SQL" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} />
+              <button className="primary" type="submit">+ Add skill</button>
+            </form>
+            <div className="panel">
+              {skills.map((skill, index) => (
+                <div className="skill-row" key={skill.name}>
+                  <div className="skill-label"><span>{skill.name}</span><strong>{skill.level}%</strong></div>
+                  <input type="range" min="0" max="100" value={skill.level} onChange={(e) => setSkills(skills.map((item, i) => i === index ? { ...item, level: Number(e.target.value) } : item))} />
+                  <div className="progress"><div style={{ width: `${skill.level}%` }}></div></div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {page === "Find Jobs" && (
+          <section className="page-content">
+            <span className="eyebrow">YOUR NEXT OPPORTUNITY</span><h1>Find Jobs</h1>
+            <p className="page-sub">Explore sample roles and their required skills.</p>
+            <div className="job-list panel">
+              {jobs.map((job) => {
+                const applied = applications.some((item) => item.title === job.title);
+                return <div className="job-card" key={job.title}>
+                  <div className="company-icon"></div>
+                  <div className="job-info"><strong>{job.title}</strong><small>{job.company}  -  Sample listing</small>
+                    <div className="chips">{job.skills.map((skill) => <span key={skill}>{skill}</span>)}</div>
+                    <small>Illustrative match score: {job.match}%</small>
+                  </div>
+                  <button className={applied ? "secondary" : "primary"} disabled={applied} onClick={() => apply(job)}>{applied ? "Applied" : "Apply"}</button>
+                </div>;
+              })}
+            </div>
+            <p className="disclaimer">These are sample listings, not live vacancies.</p>
+          </section>
+        )}
+
+        {page === "Career Guidance" && (
+          <section className="page-content">
+            <span className="eyebrow">PLAN YOUR FUTURE</span><h1>Career Guidance</h1>
+            <p className="page-sub">Explore career paths and skills to develop.</p>
+            <div className="guidance-grid">
+              {[
+                { title: "AI / ML Engineer", skills: "Python, Mathematics, Machine Learning" },
+                { title: "Web Developer", skills: "HTML, CSS, JavaScript, React" },
+                { title: "Data Analyst", skills: "SQL, Python, Statistics, Visualization" },
+              ].map((career) => (
+                <div className="panel career-card" key={career.title}>
+                  <h2>{career.title}</h2><p>Skills to explore</p>
+                  <div className="chips">{career.skills.split(", ").map((skill) => <span key={skill}>{skill}</span>)}</div>
+                  <button className="secondary" onClick={() => { setProfile({ ...profile, goal: career.title }); setPage("My Profile"); }}>Set as career goal </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {page === "Applications" && (
+          <section className="page-content">
+            <span className="eyebrow">YOUR JOB SEARCH</span><h1>Applications</h1>
+            <p className="page-sub">Track roles you have applied to in this session.</p>
+            <div className="panel">
+              {applications.length === 0 ? (
+                <div className="empty-state"><h2>No applications yet</h2><p>Explore sample jobs and click Apply to see them here.</p>
+                  <button className="primary" onClick={() => setPage("Find Jobs")}>Browse jobs</button>
+                </div>
+              ) : applications.map((item) => (
+                <div className="job-row" key={item.title}><div className="company-icon"></div><div className="job-info"><strong>{item.title}</strong><small>{item.company}</small></div><span className="status">{item.status}</span></div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {page === "Resume" && (
+          <section className="page-content">
+            <span className="eyebrow">CAREER TOOLKIT</span>
+            <h1>Resume Builder</h1>
+            <p className="page-sub">Create and download your professional resume.</p>
+
+            <form className="panel resume-form" onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const resume = [
+                form.get("name"),
+                form.get("email"),
+                form.get("phone"),
+                "",
+                "CAREER OBJECTIVE",
+                form.get("objective"),
+                "",
+                "EDUCATION",
+                form.get("education"),
+                "",
+                "TECHNICAL SKILLS",
+                form.get("skills"),
+                "",
+                "PROJECTS",
+                form.get("projects"),
+                "",
+                "CERTIFICATIONS",
+                form.get("certifications")
+              ].join("\n");
+              const blob = new Blob([resume], { type: "text/plain;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "SkillPath-Resume.txt";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <div className="form-grid">
+                <label>Full name<input name="name" placeholder="Enter your full name" required /></label>
+                <label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label>
+                <label>Phone number<input name="phone" type="tel" placeholder="Enter phone number" /></label>
+                <label>Education<input name="education" placeholder="Degree, college, year" required /></label>
+              </div>
+
+              <label>Career objective
+                <textarea name="objective" rows="3" placeholder="Write a short professional objective..." required />
+              </label>
+              <label>Technical skills
+                <textarea name="skills" rows="3" placeholder="Python, Java, Machine Learning..." required />
+              </label>
+              <label>Projects
+                <textarea name="projects" rows="4" placeholder="Project name and a short description..." />
+              </label>
+              <label>Certifications
+                <textarea name="certifications" rows="3" placeholder="Courses and certifications..." />
+              </label>
+
+              <button className="primary" type="submit">Download Resume</button>
+            </form>
+          </section>
+        )}
+          {page === "Resume Analyzer" && (
+          <section className="page-content resume-analyzer">
+            <span className="eyebrow">CAREER TOOLKIT</span>
+            <h1>Resume Analyzer</h1>
+            <p className="page-sub">
+              Discover your current skills and find what to learn for your target career.
+            </p>
+
+            <form className="panel analyzer-upload" onSubmit={analyzeResume}>
+              <label>
+                Target career
+                <select
+                  value={targetRole}
+                  onChange={(event) => {
+                    setTargetRole(event.target.value);
+                    setAnalysis(null);
+                  }}
+                >
+                  {Object.keys(roleSkills).map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Upload your resume (PDF or DOCX)
+                <input
+                  type="file"
+                  accept=".pdf,.docx"
+                  onChange={(event) => {
+                    setResumeFile(event.target.files?.[0] || null);
+                    setAnalysis(null);
+                    setAnalysisError("");
+                  }}
+                />
+              </label>
+
+              {resumeFile && <p className="page-sub">Selected: {resumeFile.name}</p>}
+
+              <button className="primary" type="submit" disabled={analyzing}>
+                {analyzing ? "Analyzing..." : "Analyze My Resume"}
+              </button>
+
+              {analysisError && <p className="analyzer-error">{analysisError}</p>}
+            </form>
+
+            {analysis && (
+              <div className="analyzer-results">
+                <div className="panel analyzer-score">
+                  <span className="eyebrow">CAREER MATCH</span>
+                  <h2>{analysis.match}%</h2>
+                  <p>Your resume matches {analysis.role} requirements for {analysis.found.length} of {roleSkills[analysis.role].length} listed skills.</p>
+                  <div className="analyzer-progress">
+                    <div style={{ width: `${analysis.match}%` }} />
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <h2>Skills found in your resume</h2>
+                  <div className="skill-chip-list">
+                    {analysis.detected.length > 0
+                      ? analysis.detected.map((skill) => (
+                        <span className="skill-chip" key={skill}>{skill}</span>
+                      ))
+                      : <p>No matching skills detected. Try a text-based resume.</p>}
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <h2>Skills to learn for {analysis.role}</h2>
+                  <p className="page-sub">Prioritize these skills to close your current gap.</p>
+                  <div className="skill-chip-list">
+                    {analysis.missing.length > 0
+                      ? analysis.missing.map((skill, index) => (
+                        <span className="skill-chip missing" key={skill}>
+                          {index + 1}. {skill}
+                        </span>
+                      ))
+                      : <span className="skill-chip">All listed skills detected!</span>}
+                  </div>
+                </div>
+
+                <button className="primary" onClick={() => setPage("Find Jobs")}>
+                  Explore Related Jobs
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+      <footer>SkillPath AI  -  Intelligent Career & Skill Development Platform  -  Demo version</footer>
+      </main>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
